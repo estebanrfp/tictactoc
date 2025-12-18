@@ -393,21 +393,43 @@
             
             if (msg.type === 'state' && msg.payload) {
                 console.log("🎮 Applying state:", msg.payload);
-                console.log("📊 Current board:", msg.payload.board);
+                console.log("📊 Players in received state:", msg.payload.players);
                 state.local = { ...msg.payload };
                 
-                // Re-sync assignment if we don't have a symbol yet, or if players changed
+                // Check if we need to assign/reassign our role
                 const players = msg.payload.players || {};
-                const needsAssignment = !state.mySymbol || 
-                    (players.X && players.O && state.mySymbol !== 'X' && state.mySymbol !== 'O' && state.mySymbol !== 'Spectator');
+                const myId = sessionStorage.getItem('ttt_user_id');
+                const bothPlayersAssigned = players.X && players.O;
+                const imX = players.X === myId;
+                const imO = players.O === myId;
                 
-                if (needsAssignment && state.roomId) {
-                    console.log("🔄 Re-syncing player assignment...");
+                // Determine correct symbol based on current state
+                if (imX) {
+                    if (state.mySymbol !== 'X') {
+                        state.mySymbol = 'X';
+                        console.log("👤 Confirmed as X");
+                    }
+                } else if (imO) {
+                    if (state.mySymbol !== 'O') {
+                        state.mySymbol = 'O';
+                        console.log("👤 Confirmed as O");
+                    }
+                } else if (bothPlayersAssigned && state.mySymbol !== 'Spectator') {
+                    // Both slots taken and I'm not one of them = Spectator
+                    state.mySymbol = 'Spectator';
+                    console.log("👁️ Both players assigned, switching to Spectator");
+                    resetBtn.disabled = true;
+                    resetBtn.style.opacity = '0.3';
+                    resetBtn.style.cursor = 'not-allowed';
+                } else if (!state.mySymbol && state.roomId) {
+                    // No symbol yet, try to get one
+                    console.log("🔄 No symbol assigned, running syncPlayerAssignment...");
                     syncPlayerAssignment();
                 }
                 
                 // Always update UI when receiving state
                 updateUI();
+
 
             } else if (msg.type === 'sync-request') {
                 // Only respond to sync requests for our room
@@ -425,12 +447,18 @@
             state.connectedPeers.add(peerId);
             updatePeerCount();
             
-            // Send current state to new peer
+            // Send current state to new peer with multiple attempts for reliability
             if (state.roomId && state.local.board) {
-                setTimeout(() => {
-                    console.log(`📤 Sending state to new peer ${peerId}`);
+                const sendStateToNewPeer = (attempt) => {
+                    if (attempt > 3) return;
+                    console.log(`📤 Sending state to new peer ${peerId} (attempt ${attempt}/3)`);
+                    console.log(`📊 Players in state:`, state.local.players);
                     gameChannel.send({ type: 'state', roomId: state.roomId, payload: state.local });
-                }, 100);
+                    
+                    // Retry after delay for slow connections
+                    setTimeout(() => sendStateToNewPeer(attempt + 1), 500);
+                };
+                setTimeout(() => sendStateToNewPeer(1), 100);
             }
         });
 
