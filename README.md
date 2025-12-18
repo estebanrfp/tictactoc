@@ -1,6 +1,6 @@
 # Tic Tac Toe | Minimalist Premium & Real-time P2P
 
-![Preview](statics/preview.webp)
+![Preview](assets/preview.webp)
 
 A stunningly minimalist, high-performance Tic Tac Toe game. Enhanced with **real-time multiplayer capabilities** powered by **GenosDB**, allowing decentralized P2P matches without a central server.
 
