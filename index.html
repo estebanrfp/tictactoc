@@ -336,7 +336,12 @@
 
         // Logic Functions (Declarations to handle hoisting)
         async function saveState(newState) {
+            state.local = newState;
             await state.db.put(newState, state.room);
+            // Also broadcast via channel for instant sync
+            if (state.gameChannel) {
+                state.gameChannel.send({ type: 'state', payload: newState });
+            }
         }
 
         function resetGame() {
@@ -347,10 +352,10 @@
                 isGameActive: true,
                 players: state.local.players || {}
             };
-            state.local = newState;
             saveState(newState);
             updateUI();
         }
+
         const initGame = async (roomID) => {
             if (window.location.protocol === 'file:') {
                 document.getElementById('protocol-warning').style.display = 'block';
@@ -363,47 +368,70 @@
             lobbyContainer.style.display = 'none';
             gameContainer.style.display = 'flex';
 
-            // Subscribe to room updates (Live Synchronization)
-            // Per GenosDB docs: callback receives full node { id, value, edges, timestamp } or null
-            await state.db.get(state.room, (node) => {
-                console.log("📡 Raw node received:", node);
-                
-                // Extract value from node object as per API spec
-                const data = node?.value;
-                
-                if (data && typeof data === 'object' && data.board) {
-                    console.log("🎮 Game state synced:", data);
-                    state.local = { ...data }; // Clone to avoid proxy issues
-                    
-                    // If joining a stale/finished room with no players, reset it
-                    const hasPlayers = data.players && (data.players.X || data.players.O);
-                    if (!data.isGameActive && !state.mySymbol && !hasPlayers) {
-                        resetGame();
-                        return;
-                    }
+            const room = state.db.room;
 
-                    // CRITICAL: Assign symbol BEFORE updating UI so isMyTurn works correctly
+            // === 1. Create a channel for real-time game state ===
+            state.gameChannel = room.channel("game-state");
+
+            // Listen for real-time state updates from peers
+            state.gameChannel.on("message", (msg, peerId) => {
+                console.log(`📨 Message from ${peerId}:`, msg);
+                if (msg.type === 'state' && msg.payload) {
+                    state.local = { ...msg.payload };
                     if (!state.mySymbol) {
                         syncPlayerAssignment();
                     }
-                    
-                    updateUI();
-                } else if (!node || !data) {
-                    console.log("🆕 Creating new room:", state.room);
-                    const initialState = {
-                        board: Array(9).fill(null),
-                        currentPlayer: 'X',
-                        isGameActive: true,
-                        players: {}
-                    };
-                    state.local = initialState;
-                    saveState(initialState);
-                    
-                    // First player creates room - assign them as X immediately
-                    syncPlayerAssignment();
                     updateUI();
                 }
             });
+
+            // === 2. Listen for peer join/leave events ===
+            room.on("peer:join", (peerId) => {
+                console.log(`⚡ Peer joined: ${peerId}`);
+                // Send current state to new peer
+                if (state.local.board) {
+                    state.gameChannel.send({ type: 'state', payload: state.local });
+                }
+            });
+
+            room.on("peer:leave", (peerId) => {
+                console.log(`👋 Peer left: ${peerId}`);
+            });
+
+            // === 3. Load initial persistent state from database ===
+            const { result: node } = await state.db.get(state.room);
+            console.log("📡 Initial node from DB:", node);
+            
+            const data = node?.value;
+            
+            if (data && typeof data === 'object' && data.board) {
+                console.log("🎮 Loaded existing game:", data);
+                state.local = { ...data };
+                
+                // If joining a stale/finished room with no players, reset it
+                const hasPlayers = data.players && (data.players.X || data.players.O);
+                if (!data.isGameActive && !state.mySymbol && !hasPlayers) {
+                    resetGame();
+                    return;
+                }
+
+                syncPlayerAssignment();
+                updateUI();
+            } else {
+                console.log("🆕 Creating new room:", state.room);
+                const initialState = {
+                    board: Array(9).fill(null),
+                    currentPlayer: 'X',
+                    isGameActive: true,
+                    players: {}
+                };
+                state.local = initialState;
+                await state.db.put(initialState, state.room);
+                
+                // First player creates room - assign them as X immediately
+                syncPlayerAssignment();
+                updateUI();
+            }
         };
 
         const syncPlayerAssignment = () => {
@@ -411,10 +439,12 @@
             const me = localStorage.getItem('ttt_user_id') || Math.random().toString(36).substring(7);
             localStorage.setItem('ttt_user_id', me);
 
+            let needsUpdate = false;
+
             if (!players.X) {
                 players.X = me;
                 state.mySymbol = 'X';
-                saveState({ ...state.local, players });
+                needsUpdate = true;
                 console.log("👤 Assigned as X (creator)");
             } else if (players.X === me) {
                 state.mySymbol = 'X';
@@ -422,7 +452,7 @@
             } else if (!players.O) {
                 players.O = me;
                 state.mySymbol = 'O';
-                saveState({ ...state.local, players });
+                needsUpdate = true;
                 console.log("👤 Assigned as O (joiner)");
             } else if (players.O === me) {
                 state.mySymbol = 'O';
@@ -432,9 +462,12 @@
                 console.log("👁️ Assigned as Spectator");
             }
 
+            if (needsUpdate) {
+                saveState({ ...state.local, players });
+            }
+
             playerStatusEl.textContent = `You are: ${state.mySymbol}`;
         };
-
 
 
         const checkWinner = (board) => {
