@@ -382,11 +382,12 @@
                         return;
                     }
 
-                    updateUI();
-                    
+                    // CRITICAL: Assign symbol BEFORE updating UI so isMyTurn works correctly
                     if (!state.mySymbol) {
                         syncPlayerAssignment();
                     }
+                    
+                    updateUI();
                 } else if (!node || !data) {
                     console.log("🆕 Creating new room:", state.room);
                     const initialState = {
@@ -397,6 +398,9 @@
                     };
                     state.local = initialState;
                     saveState(initialState);
+                    
+                    // First player creates room - assign them as X immediately
+                    syncPlayerAssignment();
                     updateUI();
                 }
             });
@@ -411,16 +415,21 @@
                 players.X = me;
                 state.mySymbol = 'X';
                 saveState({ ...state.local, players });
+                console.log("👤 Assigned as X (creator)");
             } else if (players.X === me) {
                 state.mySymbol = 'X';
+                console.log("👤 Recognized as X");
             } else if (!players.O) {
                 players.O = me;
                 state.mySymbol = 'O';
                 saveState({ ...state.local, players });
+                console.log("👤 Assigned as O (joiner)");
             } else if (players.O === me) {
                 state.mySymbol = 'O';
+                console.log("👤 Recognized as O");
             } else {
                 state.mySymbol = 'Spectator';
+                console.log("👁️ Assigned as Spectator");
             }
 
             playerStatusEl.textContent = `You are: ${state.mySymbol}`;
