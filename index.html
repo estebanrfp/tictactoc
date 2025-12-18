@@ -396,13 +396,19 @@
                 console.log("📊 Current board:", msg.payload.board);
                 state.local = { ...msg.payload };
                 
-                // Sync assignment if needed
-                if (!state.mySymbol && state.roomId) {
+                // Re-sync assignment if we don't have a symbol yet, or if players changed
+                const players = msg.payload.players || {};
+                const needsAssignment = !state.mySymbol || 
+                    (players.X && players.O && state.mySymbol !== 'X' && state.mySymbol !== 'O' && state.mySymbol !== 'Spectator');
+                
+                if (needsAssignment && state.roomId) {
+                    console.log("🔄 Re-syncing player assignment...");
                     syncPlayerAssignment();
                 }
                 
                 // Always update UI when receiving state
                 updateUI();
+
             } else if (msg.type === 'sync-request') {
                 // Only respond to sync requests for our room
                 if (!msg.roomId || msg.roomId === state.roomId) {
@@ -679,11 +685,29 @@
                 updateUI();
             }
 
-            // Request sync from existing peers
-            setTimeout(() => {
-                console.log("🔄 Requesting sync from existing peers...");
+            // Request sync from existing peers (with retries for slow cross-browser connections)
+            let syncRetries = 0;
+            const maxRetries = 5;
+            
+            const requestSync = () => {
+                syncRetries++;
+                console.log(`🔄 Requesting sync from peers (attempt ${syncRetries}/${maxRetries})...`);
                 gameChannel.send({ type: 'sync-request', roomId: state.roomId });
-            }, 200);
+                
+                // Retry if we still don't have proper player assignment
+                if (syncRetries < maxRetries) {
+                    setTimeout(() => {
+                        // Only retry if we still need to sync (no symbol or waiting for opponent)
+                        const players = state.local.players || {};
+                        const bothPlayers = players.X && players.O;
+                        if (!bothPlayers || !state.mySymbol) {
+                            requestSync();
+                        }
+                    }, 1000);
+                }
+            };
+            
+            setTimeout(requestSync, 300);
         };
 
         // === 5. Event Listeners ===
