@@ -2,39 +2,87 @@
 
 ![Preview](statics/preview.webp)
 
-A stunningly minimalist, high-performance Tic Tac Toe game. Now enhanced with **real-time multiplayer capabilities** powered by **GenosDB**, allowing decentralized P2P matches without a central server.
+A stunningly minimalist, high-performance Tic Tac Toe game. Enhanced with **real-time multiplayer capabilities** powered by **GenosDB**, allowing decentralized P2P matches without a central server.
 
 ## ✨ Features
-- **Real-time Multiplayer**: Decentralized synchronization using GenosDB P2P protocol.
-- **Room System**: Create or join specific battle rooms using a unique ID.
-- **Premium Design**: Glassmorphic UI with vibrant neon accents and smooth transitions.
-- **Role Assignment**: Automatic assignment of Player X, Player O, or Spectator mode.
-- **Ultra-Compact**: Entire application contained in a single standalone HTML file.
-- **Modern Tech**: Zero dependencies, utilizing modern JS features (ES2024 style).
-- **Responsive**: Fully optimized for mobile, tablet, and desktop.
-- **Aesthetics**: Curated color palette (Neon Blue & Ruby Red) and modern typography (Inter & Outfit).
 
-## 🚀 How to Run
-Due to modern browser security policies regarding Web Workers and OPFS (Origin Private File System) used by GenosDB, the application **must be served via HTTP/HTTPS** (it won't work using `file://` protocol).
+### 🎮 Multiplayer
+- **Real-time P2P Sync**: Decentralized synchronization using GenosDB WebRTC channels.
+- **Room System**: Create or join specific game rooms using a unique room name.
+- **Instant Updates**: Moves appear instantly on all connected clients.
+- **Share Link**: One-click copy of room URL to invite players.
 
-### Using Bun (Recommended)
+### 👥 Player Roles
+- **Player X** (Pink badge): First player to create/join a room.
+- **Player O** (Cyan badge): Second player to join.
+- **Spectator Mode** (Yellow badge): Third+ connections watch in real-time.
+  - Spectators see all moves with "X's Turn" / "O's Turn" indicators.
+  - Reset button is disabled for spectators.
+  - Live spectator count displayed to all players.
+
+### 🎨 Design
+- **Premium Glassmorphic UI**: Vibrant neon accents and smooth transitions.
+- **Color-coded Badges**: Visual indicators for player roles.
+- **Responsive Layout**: Optimized for mobile, tablet, and desktop.
+- **Modern Typography**: Inter & Outfit fonts.
+
+### ⚡ Technical
+- **Ultra-Compact**: Single standalone HTML file (~26KB).
+- **Zero Dependencies**: Pure vanilla JS (ES2024 style).
+- **Top-level Await**: GenosDB initializes at page load for instant P2P.
+
+## 🚀 How to Play
+
+### 1. Start a Game
 ```bash
 bun x serve ./
+# or: npx serve ./
+```
+Open `http://localhost:3000` in your browser.
+
+### 2. Create a Room
+1. Enter a room name (e.g., `my-game-2024`)
+2. Click "Join Room"
+3. You'll be assigned as **Player X**
+
+### 3. Invite Others
+1. Click **"Copy Link"** button
+2. Share the URL with friends
+3. Second player becomes **Player O**
+4. Additional players become **Spectators**
+
+### 4. Play!
+- X always goes first
+- Board is disabled when waiting for opponent
+- Winners are highlighted with golden cells
+- Click "Reset Match" or "Play Again" to restart
+
+## 🔧 Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    GenosDB (P2P Layer)                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │  Player X   │◄─►│  Player O   │◄─►│ Spectators  │     │
+│  │   (Room)    │   │   (Room)    │   │   (Room)    │     │
+│  └─────────────┘   └─────────────┘   └─────────────┘     │
+│         ▲                 ▲                 ▲            │
+│         │    WebRTC Data Channels          │            │
+│         └─────────────────┴─────────────────┘            │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Using PNPM / NPM
-```bash
-npx serve ./
-```
-Then open `http://localhost:5000` in your browser. Open it in two different tabs or devices to test the real-time sync!
+- **Database**: [GenosDB](https://github.com/estebanrfp/gdb) for real-time P2P synchronization.
+- **Channels**: `db.room.channel("game-state")` for instant move broadcasting.
+- **Presence**: `room.on("peer:join/leave")` for player/spectator tracking.
+- **Persistence**: Game state persisted via `db.put()` for late joiners.
 
-## 🛠️ Architecture
-- **Database**: [GenosDB](https://github.com/estebanrfp/gdb) for real-time P2P graph synchronization.
-- **Frontend**: Vanilla HTML5, CSS3 (Variables, Grid, Backdrop-filter), and Modern JavaScript.
-- **State Management**: Reactive P2P state synchronization with defensive coding to handle distributed updates.
+## 📋 Browser Requirements
+- Modern browser with WebRTC support
+- Must be served via HTTP/HTTPS (not `file://` protocol)
 
 ## 📄 License
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+MIT License - see [LICENSE.md](LICENSE.md)
 
 ## Author
 

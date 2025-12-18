@@ -244,6 +244,36 @@
             .cell { width: 80px; height: 80px; font-size: 2rem; }
             h1 { font-size: 2rem; }
         }
+
+        /* Player Role Badges */
+        .player-badge {
+            display: inline-block;
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        .player-badge.x {
+            background: rgba(255, 45, 85, 0.2);
+            color: var(--x-color);
+            border: 1px solid var(--x-color);
+        }
+        .player-badge.o {
+            background: rgba(50, 215, 251, 0.2);
+            color: var(--o-color);
+            border: 1px solid var(--o-color);
+        }
+        .player-badge.spectator {
+            background: rgba(255, 200, 50, 0.2);
+            color: #ffc832;
+            border: 1px solid #ffc832;
+        }
+        .spectator-count {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 0.3rem;
+        }
     </style>
 </head>
 <body>
@@ -268,6 +298,7 @@
             <h1>Tic Tac Toe</h1>
             <div id="status" class="status">Waiting for Opponent...</div>
             <div id="player-status" class="player-info"></div>
+            <div id="spectator-count" class="spectator-count"></div>
         </header>
 
         <main class="board" id="board">
@@ -298,17 +329,30 @@
 
         /**
          * Multiplayer Tic Tac Toe - GenosDB Real-time Logic
+         * Using top-level await as per GenosDB best practices
          */
 
+        // Check protocol first
+        if (window.location.protocol === 'file:') {
+            document.getElementById('protocol-warning').style.display = 'block';
+        }
+
+        // === 1. Initialize GenosDB with top-level await ===
+        const db = await gdb("ttt-premium", { rtc: true });
+        const room = db.room;
+        const gameChannel = room.channel("game-state");
+
+        console.log("✅ GenosDB and RTC initialized at top level");
+
         const state = {
-            db: null,
-            room: null,
-            mySymbol: null, // 'X' or 'O'
+            roomId: null,
+            mySymbol: null,
+            connectedPeers: new Set(),
             local: {
                 board: Array(9).fill(null),
                 currentPlayer: 'X',
                 isGameActive: true,
-                winningLine: null
+                players: {}
             }
         };
 
@@ -323,7 +367,6 @@
         const gameContainer = document.getElementById('game-container');
         const roomInput = document.getElementById('room-input');
         const joinBtn = document.getElementById('join-btn');
-
         const boardEl = document.getElementById('board');
         const cells = document.querySelectorAll('.cell');
         const statusEl = document.getElementById('status');
@@ -333,15 +376,81 @@
         const resetBtn = document.getElementById('reset-btn');
         const playAgainBtn = document.getElementById('play-again-btn');
         const shareBtn = document.getElementById('share-btn');
+        const spectatorCountEl = document.getElementById('spectator-count');
 
-        // Logic Functions (Declarations to handle hoisting)
+        // === 2. Set up RTC listeners immediately (at top level) ===
+        
+        // Listen for real-time state updates from peers
+        gameChannel.on("message", (msg, peerId) => {
+            console.log(`📨 Message from ${peerId}:`, msg);
+            console.log(`📍 My roomId: ${state.roomId}, msg.roomId: ${msg.roomId}`);
+            
+            // Skip if we're in a different room (but allow if roomId not set yet)
+            if (state.roomId && msg.roomId && msg.roomId !== state.roomId) {
+                console.log("⏭️ Skipping message for different room");
+                return;
+            }
+            
+            if (msg.type === 'state' && msg.payload) {
+                console.log("🎮 Applying state:", msg.payload);
+                console.log("📊 Current board:", msg.payload.board);
+                state.local = { ...msg.payload };
+                
+                // Sync assignment if needed
+                if (!state.mySymbol && state.roomId) {
+                    syncPlayerAssignment();
+                }
+                
+                // Always update UI when receiving state
+                updateUI();
+            } else if (msg.type === 'sync-request') {
+                // Only respond to sync requests for our room
+                if (!msg.roomId || msg.roomId === state.roomId) {
+                    console.log(`🔄 Sync request from ${peerId}, sending state...`);
+                    if (state.local.board && state.roomId) {
+                        gameChannel.send({ type: 'state', roomId: state.roomId, payload: state.local });
+                    }
+                }
+            }
+        });
+
+        room.on("peer:join", (peerId) => {
+            console.log(`⚡ Peer joined: ${peerId}`);
+            state.connectedPeers.add(peerId);
+            updatePeerCount();
+            
+            // Send current state to new peer
+            if (state.roomId && state.local.board) {
+                setTimeout(() => {
+                    console.log(`📤 Sending state to new peer ${peerId}`);
+                    gameChannel.send({ type: 'state', roomId: state.roomId, payload: state.local });
+                }, 100);
+            }
+        });
+
+        room.on("peer:leave", (peerId) => {
+            console.log(`👋 Peer left: ${peerId}`);
+            state.connectedPeers.delete(peerId);
+            updatePeerCount();
+        });
+
+        const updatePeerCount = () => {
+            const totalPeers = state.connectedPeers.size;
+            // 2 players + spectators
+            const spectators = Math.max(0, totalPeers - 1); // -1 because we count ourselves
+            if (spectators > 0) {
+                spectatorCountEl.textContent = `👁️ ${spectators} spectator${spectators > 1 ? 's' : ''} watching`;
+            } else {
+                spectatorCountEl.textContent = '';
+            }
+        };
+
+        // === 3. Helper Functions ===
+        
         async function saveState(newState) {
             state.local = newState;
-            await state.db.put(newState, state.room);
-            // Also broadcast via channel for instant sync
-            if (state.gameChannel) {
-                state.gameChannel.send({ type: 'state', payload: newState });
-            }
+            await db.put(newState, state.roomId);
+            gameChannel.send({ type: 'state', roomId: state.roomId, payload: newState });
         }
 
         function resetGame() {
@@ -356,104 +465,11 @@
             updateUI();
         }
 
-        const initGame = async (roomID) => {
-            if (window.location.protocol === 'file:') {
-                document.getElementById('protocol-warning').style.display = 'block';
-                return;
-            }
-            state.room = roomID;
-            state.db = await gdb("ttt-premium", { rtc: true });
-
-            // Show game UI
-            lobbyContainer.style.display = 'none';
-            gameContainer.style.display = 'flex';
-
-            const room = state.db.room;
-
-            // === 1. Create a channel for real-time game state ===
-            state.gameChannel = room.channel("game-state");
-
-            // Listen for real-time state updates from peers
-            state.gameChannel.on("message", (msg, peerId) => {
-                console.log(`📨 Message from ${peerId}:`, msg);
-                
-                if (msg.type === 'state' && msg.payload) {
-                    state.local = { ...msg.payload };
-                    if (!state.mySymbol) {
-                        syncPlayerAssignment();
-                    }
-                    updateUI();
-                } else if (msg.type === 'sync-request') {
-                    // Someone is asking for current state - respond
-                    console.log(`🔄 Sync request from ${peerId}, sending state...`);
-                    if (state.local.board) {
-                        state.gameChannel.send({ type: 'state', payload: state.local });
-                    }
-                }
-            });
-
-            // === 2. Listen for peer join/leave events ===
-            room.on("peer:join", (peerId) => {
-                console.log(`⚡ Peer joined: ${peerId}`);
-                // Send current state to new peer with a small delay to ensure they're ready
-                setTimeout(() => {
-                    if (state.local.board) {
-                        console.log(`📤 Sending state to new peer ${peerId}`);
-                        state.gameChannel.send({ type: 'state', payload: state.local });
-                    }
-                }, 100);
-            });
-
-            room.on("peer:leave", (peerId) => {
-                console.log(`👋 Peer left: ${peerId}`);
-            });
-
-            // === 3. Load initial persistent state from database ===
-            const { result: node } = await state.db.get(state.room);
-            console.log("📡 Initial node from DB:", node);
-            
-            const data = node?.value;
-            
-            if (data && typeof data === 'object' && data.board) {
-                console.log("🎮 Loaded existing game:", data);
-                state.local = { ...data };
-                
-                // If joining a stale/finished room with no players, reset it
-                const hasPlayers = data.players && (data.players.X || data.players.O);
-                if (!data.isGameActive && !state.mySymbol && !hasPlayers) {
-                    resetGame();
-                    return;
-                }
-
-                syncPlayerAssignment();
-                updateUI();
-            } else {
-                console.log("🆕 Creating new room:", state.room);
-                const initialState = {
-                    board: Array(9).fill(null),
-                    currentPlayer: 'X',
-                    isGameActive: true,
-                    players: {}
-                };
-                state.local = initialState;
-                await state.db.put(initialState, state.room);
-                
-                // First player creates room - assign them as X immediately
-                syncPlayerAssignment();
-                updateUI();
-            }
-
-            // === 4. Request state from existing peers (I just joined) ===
-            setTimeout(() => {
-                console.log("🔄 Requesting sync from existing peers...");
-                state.gameChannel.send({ type: 'sync-request' });
-            }, 200);
-        };
-
         const syncPlayerAssignment = () => {
             const players = state.local.players || {};
-            const me = localStorage.getItem('ttt_user_id') || Math.random().toString(36).substring(7);
-            localStorage.setItem('ttt_user_id', me);
+            // Use sessionStorage so each tab/window gets a unique ID
+            const me = sessionStorage.getItem('ttt_user_id') || Math.random().toString(36).substring(7);
+            sessionStorage.setItem('ttt_user_id', me);
 
             let needsUpdate = false;
 
@@ -476,15 +492,19 @@
             } else {
                 state.mySymbol = 'Spectator';
                 console.log("👁️ Assigned as Spectator");
+                // Disable reset button immediately for spectators
+                resetBtn.disabled = true;
+                resetBtn.style.opacity = '0.3';
+                resetBtn.style.cursor = 'not-allowed';
             }
 
             if (needsUpdate) {
                 saveState({ ...state.local, players });
             }
 
-            playerStatusEl.textContent = `You are: ${state.mySymbol}`;
+            // Update UI will handle the badge display
+            updateUI();
         };
-
 
         const checkWinner = (board) => {
             if (!board || !Array.isArray(board)) return null;
@@ -498,17 +518,15 @@
         };
 
         const updateUI = () => {
-            const { board, currentPlayer, isGameActive } = state.local;
+            const { board, currentPlayer } = state.local;
             if (!board) return;
             
             console.log("🖼️ Rendering board:", board);
 
-            // Force re-render all cells to match board state
             cells.forEach((cell, i) => {
                 const val = board[i];
                 cell.textContent = '';
                 cell.classList.remove('x', 'o', 'win');
-                
                 if (val) {
                     const span = document.createElement('span');
                     span.textContent = val;
@@ -517,7 +535,6 @@
                 }
             });
 
-            // Turn & Game Status Feedback
             const players = state.local.players || {};
             const bothPlayersConnected = players.X && players.O;
             const result = checkWinner(board);
@@ -534,22 +551,40 @@
                 boardEl.style.pointerEvents = "none";
                 boardEl.style.opacity = "0.7";
             } else if (!bothPlayersConnected) {
-                // Waiting for opponent
                 statusEl.textContent = "Waiting for opponent...";
                 boardEl.style.opacity = "0.5";
                 boardEl.style.pointerEvents = "none";
             } else {
                 const isMyTurn = state.mySymbol === currentPlayer;
-                statusEl.textContent = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
-                boardEl.style.opacity = isMyTurn ? "1" : "0.7";
-                boardEl.style.pointerEvents = isMyTurn ? "auto" : "none";
+                const isSpectator = state.mySymbol === 'Spectator';
+                
+                if (isSpectator) {
+                    statusEl.textContent = `${currentPlayer}'s Turn`;
+                    boardEl.style.opacity = "1";
+                    boardEl.style.pointerEvents = "none";
+                } else {
+                    statusEl.textContent = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
+                    boardEl.style.opacity = isMyTurn ? "1" : "0.7";
+                    boardEl.style.pointerEvents = isMyTurn ? "auto" : "none";
+                }
                 overlayEl.classList.remove('show');
             }
 
-            // Player status
-            playerStatusEl.textContent = state.mySymbol === 'Spectator' 
-                ? "You are: Spectator (Read Only)" 
-                : `You are: ${state.mySymbol || 'Connecting...'}`;
+            // Player status with badge
+            const badgeClass = state.mySymbol?.toLowerCase() || '';
+            if (state.mySymbol === 'Spectator') {
+                playerStatusEl.innerHTML = `<span class="player-badge spectator">👁️ Spectator Mode</span>`;
+                resetBtn.disabled = true;
+                resetBtn.style.opacity = '0.3';
+                resetBtn.style.cursor = 'not-allowed';
+            } else if (state.mySymbol) {
+                playerStatusEl.innerHTML = `<span class="player-badge ${badgeClass}">Playing as ${state.mySymbol}</span>`;
+                resetBtn.disabled = false;
+                resetBtn.style.opacity = '1';
+                resetBtn.style.cursor = 'pointer';
+            } else {
+                playerStatusEl.textContent = 'Connecting...';
+            }
         };
 
         const handleCellClick = (e) => {
@@ -559,7 +594,6 @@
             const index = parseInt(cell.dataset.index);
             const { board, currentPlayer, isGameActive, players } = state.local;
 
-            // Must have both players connected
             const bothPlayersConnected = players?.X && players?.O;
             if (!bothPlayersConnected) return;
 
@@ -572,7 +606,6 @@
             const result = checkWinner(newBoard);
             const nextPlayer = currentPlayer === 'X' ? 'O' : 'X';
             
-            // Update local state immediately for instant feedback
             const newState = {
                 ...state.local,
                 board: newBoard,
@@ -580,9 +613,7 @@
                 isGameActive: !result
             };
             state.local = newState;
-            updateUI(); // Show immediately on my screen
-            
-            // Then sync to network
+            updateUI();
             saveState(newState);
         };
 
@@ -600,7 +631,7 @@
 
         const shareGame = () => {
             const url = new URL(window.location.href);
-            url.searchParams.set('room', state.room);
+            url.searchParams.set('room', state.roomId);
             navigator.clipboard.writeText(url.href).then(() => {
                 const originalText = shareBtn.textContent;
                 shareBtn.textContent = 'Copied!';
@@ -608,10 +639,67 @@
             });
         };
 
-        // Event Listeners
+        // === 4. Join Room Function (only room-specific logic) ===
+        const joinRoom = async (roomId) => {
+            state.roomId = roomId;
+            
+            // Show game UI
+            lobbyContainer.style.display = 'none';
+            gameContainer.style.display = 'flex';
+
+            // Load initial state from database
+            const { result: node } = await db.get(roomId);
+            console.log("📡 Initial node from DB:", node);
+            
+            const data = node?.value;
+            
+            if (data && typeof data === 'object' && data.board) {
+                console.log("🎮 Loaded existing game:", data);
+                state.local = { ...data };
+                
+                const hasPlayers = data.players && (data.players.X || data.players.O);
+                if (!data.isGameActive && !state.mySymbol && !hasPlayers) {
+                    resetGame();
+                    return;
+                }
+
+                syncPlayerAssignment();
+                updateUI();
+            } else {
+                console.log("🆕 Creating new room:", roomId);
+                const initialState = {
+                    board: Array(9).fill(null),
+                    currentPlayer: 'X',
+                    isGameActive: true,
+                    players: {}
+                };
+                state.local = initialState;
+                await db.put(initialState, roomId);
+                syncPlayerAssignment();
+                updateUI();
+            }
+
+            // Request sync from existing peers
+            setTimeout(() => {
+                console.log("🔄 Requesting sync from existing peers...");
+                gameChannel.send({ type: 'sync-request', roomId: state.roomId });
+            }, 200);
+        };
+
+        // === 5. Event Listeners ===
         joinBtn.addEventListener('click', () => {
-            const id = roomInput.value.trim() || 'default-room';
-            initGame(id);
+            const id = roomInput.value.trim();
+            if (!id) {
+                roomInput.style.border = '2px solid #ff2d55';
+                roomInput.placeholder = 'Please enter a room name!';
+                roomInput.focus();
+                setTimeout(() => {
+                    roomInput.style.border = '';
+                    roomInput.placeholder = 'Enter room name';
+                }, 2000);
+                return;
+            }
+            joinRoom(id);
         });
 
         roomInput.addEventListener('keypress', (e) => {
@@ -621,13 +709,13 @@
         boardEl.addEventListener('click', handleCellClick);
         resetBtn.addEventListener('click', resetGame);
         playAgainBtn.addEventListener('click', resetGame);
-        document.getElementById('share-btn').addEventListener('click', shareGame);
+        shareBtn.addEventListener('click', shareGame);
 
         // Auto-join if room in URL
         const params = new URLSearchParams(window.location.search);
         if (params.has('room')) {
             roomInput.value = params.get('room');
-            initGame(params.get('room'));
+            joinRoom(params.get('room'));
         }
     </script>
 </body>
