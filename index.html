@@ -451,20 +451,20 @@
         const updateUI = () => {
             const { board, currentPlayer, isGameActive } = state.local;
             if (!board) return;
+            
+            console.log("🖼️ Rendering board:", board);
 
-            // Update cells
+            // Force re-render all cells to match board state
             cells.forEach((cell, i) => {
                 const val = board[i];
-                // Always check textContent to decide if update is needed
-                if (cell.textContent !== (val || '')) {
-                    cell.textContent = '';
-                    cell.classList.remove('x', 'o', 'win');
-                    if (val) {
-                        const span = document.createElement('span');
-                        span.textContent = val;
-                        cell.appendChild(span);
-                        cell.classList.add(val.toLowerCase());
-                    }
+                cell.textContent = '';
+                cell.classList.remove('x', 'o', 'win');
+                
+                if (val) {
+                    const span = document.createElement('span');
+                    span.textContent = val;
+                    cell.appendChild(span);
+                    cell.classList.add(val.toLowerCase());
                 }
             });
 
@@ -483,23 +483,16 @@
                 boardEl.style.opacity = "0.7";
             } else {
                 const isMyTurn = state.mySymbol === currentPlayer;
-                const turnText = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
-                
-                if (statusEl.textContent !== turnText) {
-                    statusEl.textContent = turnText;
-                }
-                
+                statusEl.textContent = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
                 boardEl.style.opacity = isMyTurn ? "1" : "0.7";
                 boardEl.style.pointerEvents = isMyTurn ? "auto" : "none";
                 overlayEl.classList.remove('show');
             }
 
-            // Spectator mode visibility
-            if (state.mySymbol === 'Spectator') {
-                playerStatusEl.textContent = "You are: Spectator (Read Only)";
-            } else {
-                playerStatusEl.textContent = `You are: ${state.mySymbol}`;
-            }
+            // Player status
+            playerStatusEl.textContent = state.mySymbol === 'Spectator' 
+                ? "You are: Spectator (Read Only)" 
+                : `You are: ${state.mySymbol || 'Connecting...'}`;
         };
 
         const handleCellClick = (e) => {
