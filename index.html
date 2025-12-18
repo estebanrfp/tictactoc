@@ -376,22 +376,32 @@
             // Listen for real-time state updates from peers
             state.gameChannel.on("message", (msg, peerId) => {
                 console.log(`📨 Message from ${peerId}:`, msg);
+                
                 if (msg.type === 'state' && msg.payload) {
                     state.local = { ...msg.payload };
                     if (!state.mySymbol) {
                         syncPlayerAssignment();
                     }
                     updateUI();
+                } else if (msg.type === 'sync-request') {
+                    // Someone is asking for current state - respond
+                    console.log(`🔄 Sync request from ${peerId}, sending state...`);
+                    if (state.local.board) {
+                        state.gameChannel.send({ type: 'state', payload: state.local });
+                    }
                 }
             });
 
             // === 2. Listen for peer join/leave events ===
             room.on("peer:join", (peerId) => {
                 console.log(`⚡ Peer joined: ${peerId}`);
-                // Send current state to new peer
-                if (state.local.board) {
-                    state.gameChannel.send({ type: 'state', payload: state.local });
-                }
+                // Send current state to new peer with a small delay to ensure they're ready
+                setTimeout(() => {
+                    if (state.local.board) {
+                        console.log(`📤 Sending state to new peer ${peerId}`);
+                        state.gameChannel.send({ type: 'state', payload: state.local });
+                    }
+                }, 100);
             });
 
             room.on("peer:leave", (peerId) => {
@@ -432,6 +442,12 @@
                 syncPlayerAssignment();
                 updateUI();
             }
+
+            // === 4. Request state from existing peers (I just joined) ===
+            setTimeout(() => {
+                console.log("🔄 Requesting sync from existing peers...");
+                state.gameChannel.send({ type: 'sync-request' });
+            }, 200);
         };
 
         const syncPlayerAssignment = () => {
