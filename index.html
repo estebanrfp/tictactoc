@@ -334,7 +334,23 @@
         const playAgainBtn = document.getElementById('play-again-btn');
         const shareBtn = document.getElementById('share-btn');
 
-        // Initialize DB
+        // Logic Functions (Declarations to handle hoisting)
+        async function saveState(newState) {
+            await state.db.put(newState, state.room);
+        }
+
+        function resetGame() {
+            if (state.mySymbol === 'Spectator') return;
+            const newState = {
+                board: Array(9).fill(null),
+                currentPlayer: 'X',
+                isGameActive: true,
+                players: state.local.players || {}
+            };
+            state.local = newState;
+            saveState(newState);
+            updateUI();
+        }
         const initGame = async (roomID) => {
             if (window.location.protocol === 'file:') {
                 document.getElementById('protocol-warning').style.display = 'block';
@@ -349,12 +365,20 @@
 
             // Subscribe to room updates
             await state.db.get(state.room, (node) => {
-                if (node && (node.value || node.board)) {
-                    // Update state carefully to keep board and symbol synced
-                    state.local = node.value || node;
+                const data = node?.value || node;
+                
+                if (data && data.board) {
+                    state.local = data;
+                    
+                    // Critical Fix: If joining a finished game with no active players, auto-reset
+                    const hasPlayers = data.players && (data.players.X || data.players.O);
+                    if (!data.isGameActive && !state.mySymbol && !hasPlayers) {
+                        resetGame();
+                        return;
+                    }
+
                     updateUI();
                     
-                    // Assign my symbol only once
                     if (!state.mySymbol) {
                         syncPlayerAssignment();
                     }
@@ -397,10 +421,7 @@
             playerStatusEl.textContent = `You are: ${state.mySymbol}`;
         };
 
-        const saveState = async (newState) => {
-            // Force put to use the roomID as key
-            await state.db.put(newState, state.room);
-        };
+
 
         const checkWinner = (board) => {
             if (!board || !Array.isArray(board)) return null;
@@ -437,34 +458,37 @@
             const result = checkWinner(board);
             if (result) {
                 if (result.winner === 'Draw') {
+                    statusEl.textContent = "It's a Draw!";
                     showEndScreen("It's a Draw!");
                 } else {
+                    statusEl.textContent = `${result.winner} Wins!`;
                     highlightWinningLine(result.combo);
                     setTimeout(() => showEndScreen(`${result.winner} Wins!`), 600);
                 }
             } else {
-                statusEl.textContent = `Player ${currentPlayer}'s Turn`;
+                const isMyTurn = state.mySymbol === currentPlayer;
+                statusEl.textContent = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
+                boardEl.style.opacity = isMyTurn ? "1" : "0.7";
+                boardEl.style.pointerEvents = isMyTurn ? "auto" : "none";
                 overlayEl.classList.remove('show');
             }
         };
 
         const handleCellClick = (e) => {
             const cell = e.target.closest('.cell');
-            if (!cell) return;
+            if (!cell || state.mySymbol === 'Spectator') return;
             
             const index = parseInt(cell.dataset.index);
             const { board, currentPlayer, isGameActive } = state.local;
 
             if (!board || board[index] || !isGameActive) return;
-            
-            // Multiplayer check: Is it my turn?
             if (state.mySymbol !== currentPlayer) return;
 
             const newBoard = [...board];
             newBoard[index] = state.mySymbol;
             
             const result = checkWinner(newBoard);
-            const nextPlayer = state.mySymbol === 'X' ? 'O' : 'X';
+            const nextPlayer = currentPlayer === 'X' ? 'O' : 'X';
             
             saveState({
                 ...state.local,
@@ -484,16 +508,6 @@
         const showEndScreen = (text) => {
             winnerTextEl.textContent = text;
             overlayEl.classList.add('show');
-        };
-
-        const resetGame = () => {
-            if (state.mySymbol === 'Spectator') return;
-            saveState({
-                ...state.local,
-                board: Array(9).fill(null),
-                currentPlayer: 'X',
-                isGameActive: true
-            });
         };
 
         const shareGame = () => {
