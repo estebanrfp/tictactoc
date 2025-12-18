@@ -284,6 +284,7 @@
 
         <footer class="controls">
             <button id="reset-btn">Reset Match</button>
+            <button id="share-btn" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid var(--border-color);">Copy Link</button>
         </footer>
     </div>
 
@@ -331,6 +332,7 @@
         const winnerTextEl = document.getElementById('winner-text');
         const resetBtn = document.getElementById('reset-btn');
         const playAgainBtn = document.getElementById('play-again-btn');
+        const shareBtn = document.getElementById('share-btn');
 
         // Initialize DB
         const initGame = async (roomID) => {
@@ -494,6 +496,16 @@
             });
         };
 
+        const shareGame = () => {
+            const url = new URL(window.location.href);
+            url.searchParams.set('room', state.room);
+            navigator.clipboard.writeText(url.href).then(() => {
+                const originalText = shareBtn.textContent;
+                shareBtn.textContent = 'Copied!';
+                setTimeout(() => shareBtn.textContent = originalText, 2000);
+            });
+        };
+
         // Event Listeners
         joinBtn.addEventListener('click', () => {
             const id = roomInput.value.trim() || 'default-room';
@@ -507,6 +519,7 @@
         boardEl.addEventListener('click', handleCellClick);
         resetBtn.addEventListener('click', resetGame);
         playAgainBtn.addEventListener('click', resetGame);
+        document.getElementById('share-btn').addEventListener('click', shareGame);
 
         // Auto-join if room in URL
         const params = new URLSearchParams(window.location.search);
