@@ -469,7 +469,10 @@
             });
 
             // Turn & Game Status Feedback
+            const players = state.local.players || {};
+            const bothPlayersConnected = players.X && players.O;
             const result = checkWinner(board);
+            
             if (result) {
                 if (result.winner === 'Draw') {
                     statusEl.textContent = "It's a Draw!";
@@ -481,6 +484,11 @@
                 }
                 boardEl.style.pointerEvents = "none";
                 boardEl.style.opacity = "0.7";
+            } else if (!bothPlayersConnected) {
+                // Waiting for opponent
+                statusEl.textContent = "Waiting for opponent...";
+                boardEl.style.opacity = "0.5";
+                boardEl.style.pointerEvents = "none";
             } else {
                 const isMyTurn = state.mySymbol === currentPlayer;
                 statusEl.textContent = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
@@ -500,7 +508,11 @@
             if (!cell || state.mySymbol === 'Spectator') return;
             
             const index = parseInt(cell.dataset.index);
-            const { board, currentPlayer, isGameActive } = state.local;
+            const { board, currentPlayer, isGameActive, players } = state.local;
+
+            // Must have both players connected
+            const bothPlayersConnected = players?.X && players?.O;
+            if (!bothPlayersConnected) return;
 
             if (!board || board[index] || !isGameActive) return;
             if (state.mySymbol !== currentPlayer) return;
@@ -511,12 +523,18 @@
             const result = checkWinner(newBoard);
             const nextPlayer = currentPlayer === 'X' ? 'O' : 'X';
             
-            saveState({
+            // Update local state immediately for instant feedback
+            const newState = {
                 ...state.local,
                 board: newBoard,
                 currentPlayer: nextPlayer,
                 isGameActive: !result
-            });
+            };
+            state.local = newState;
+            updateUI(); // Show immediately on my screen
+            
+            // Then sync to network
+            saveState(newState);
         };
 
         const highlightWinningLine = (combo) => {
