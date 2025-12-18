@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe | Minimalist Premium Edition</title>
+    <meta name="description" content="A stunningly minimalist Tic Tac Toe game with premium glassmorphic design and smooth animations.">
+    
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #050505;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent-x: #00f2ff; /* Neon Blue */
+            --accent-o: #ff2d55; /* Ruby Red */
+            --glass-blur: 15px;
+            --transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 242, 255, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(255, 45, 85, 0.05) 0%, transparent 40%);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+            animation: fadeIn 1s ease-out;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        #lobby {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 32px;
+            backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            padding: 12px 20px;
+            border-radius: 12px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            outline: none;
+            width: 100%;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        input:focus {
+            border-color: var(--accent-x);
+            background: rgba(255,255,255,0.08);
+        }
+
+        header {
+            text-align: center;
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 2.5rem;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #fff, rgba(255,255,255,0.5));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status {
+            font-weight: 300;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .player-info {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            opacity: 0.8;
+        }
+
+        /* Board Styling */
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            padding: 12px;
+            background: var(--card-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-family: 'Outfit', sans-serif;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cell:hover:not(.x):not(.o) {
+            background: rgba(255, 255, 255, 0.05);
+            transform: scale(1.02);
+        }
+
+        .cell.x { color: var(--accent-x); text-shadow: 0 0 20px rgba(0, 242, 255, 0.5); }
+        .cell.o { color: var(--accent-o); text-shadow: 0 0 20px rgba(255, 45, 85, 0.5); }
+
+        .cell.win {
+            background: rgba(0, 242, 255, 0.1);
+            border-color: var(--accent-x);
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 1rem;
+        }
+
+        button {
+            background: #ffffff;
+            color: #000;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 12px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 255, 255, 0.2);
+            filter: brightness(0.9);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Modal / Winner Screen */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .winner-text {
+            font-family: 'Outfit', sans-serif;
+            font-size: 4rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .cell span {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.5); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .cell { width: 80px; height: 80px; font-size: 2rem; }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="lobby-container">
+        <header>
+            <h1>Join a Room</h1>
+            <div class="status">Enter a room ID to start playing</div>
+        </header>
+
+        <div id="lobby">
+            <input type="text" id="room-input" placeholder="e.g. secret-battle" maxlength="20">
+            <button id="join-btn">Join Match</button>
+            <div id="protocol-warning" style="display: none; color: #ff2d55; font-size: 0.8rem; margin-top: 1rem; line-height: 1.4;">
+                ⚠️ <strong>Security Restriction:</strong> GenosDB requires a local server. <br> Run <code>bun x serve ./</code> to play!
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="game-container" style="display: none;">
+        <header>
+            <h1>Tic Tac Toe</h1>
+            <div id="status" class="status">Waiting for Opponent...</div>
+            <div id="player-status" class="player-info"></div>
+        </header>
+
+        <main class="board" id="board">
+            <div class="cell" data-index="0" id="cell-0"></div>
+            <div class="cell" data-index="1" id="cell-1"></div>
+            <div class="cell" data-index="2" id="cell-2"></div>
+            <div class="cell" data-index="3" id="cell-3"></div>
+            <div class="cell" data-index="4" id="cell-4"></div>
+            <div class="cell" data-index="5" id="cell-5"></div>
+            <div class="cell" data-index="6" id="cell-6"></div>
+            <div class="cell" data-index="7" id="cell-7"></div>
+            <div class="cell" data-index="8" id="cell-8"></div>
+        </main>
+
+        <footer class="controls">
+            <button id="reset-btn">Reset Match</button>
+        </footer>
+    </div>
+
+    <div class="overlay" id="overlay">
+        <div class="winner-text" id="winner-text">X Wins!</div>
+        <button id="play-again-btn">Play Again</button>
+    </div>
+
+    <script type="module">
+        import { gdb } from "https://cdn.jsdelivr.net/npm/genosdb@latest/dist/index.min.js";
+
+        /**
+         * Multiplayer Tic Tac Toe - GenosDB Real-time Logic
+         */
+
+        const state = {
+            db: null,
+            room: null,
+            mySymbol: null, // 'X' or 'O'
+            local: {
+                board: Array(9).fill(null),
+                currentPlayer: 'X',
+                isGameActive: true,
+                winningLine: null
+            }
+        };
+
+        const winningCombinations = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ];
+
+        // UI Elements
+        const lobbyContainer = document.getElementById('lobby-container');
+        const gameContainer = document.getElementById('game-container');
+        const roomInput = document.getElementById('room-input');
+        const joinBtn = document.getElementById('join-btn');
+
+        const boardEl = document.getElementById('board');
+        const cells = document.querySelectorAll('.cell');
+        const statusEl = document.getElementById('status');
+        const playerStatusEl = document.getElementById('player-status');
+        const overlayEl = document.getElementById('overlay');
+        const winnerTextEl = document.getElementById('winner-text');
+        const resetBtn = document.getElementById('reset-btn');
+        const playAgainBtn = document.getElementById('play-again-btn');
+
+        // Initialize DB
+        const initGame = async (roomID) => {
+            if (window.location.protocol === 'file:') {
+                document.getElementById('protocol-warning').style.display = 'block';
+                return;
+            }
+            state.room = roomID;
+            state.db = await gdb("ttt-premium", { rtc: true });
+
+            // Show game UI
+            lobbyContainer.style.display = 'none';
+            gameContainer.style.display = 'flex';
+
+            // Subscribe to room updates
+            await state.db.get(state.room, (node) => {
+                if (node && (node.value || node.board)) {
+                    // Update state carefully to keep board and symbol synced
+                    state.local = node.value || node;
+                    updateUI();
+                    
+                    // Assign my symbol only once
+                    if (!state.mySymbol) {
+                        syncPlayerAssignment();
+                    }
+                } else if (!node) {
+                    // Initialize empty room if not exists
+                    const initialState = {
+                        board: Array(9).fill(null),
+                        currentPlayer: 'X',
+                        isGameActive: true,
+                        players: {}
+                    };
+                    state.local = initialState;
+                    saveState(initialState);
+                    updateUI();
+                }
+            });
+        };
+
+        const syncPlayerAssignment = () => {
+            const players = state.local.players || {};
+            const me = localStorage.getItem('ttt_user_id') || Math.random().toString(36).substring(7);
+            localStorage.setItem('ttt_user_id', me);
+
+            if (!players.X) {
+                players.X = me;
+                state.mySymbol = 'X';
+                saveState({ ...state.local, players });
+            } else if (players.X === me) {
+                state.mySymbol = 'X';
+            } else if (!players.O) {
+                players.O = me;
+                state.mySymbol = 'O';
+                saveState({ ...state.local, players });
+            } else if (players.O === me) {
+                state.mySymbol = 'O';
+            } else {
+                state.mySymbol = 'Spectator';
+            }
+
+            playerStatusEl.textContent = `You are: ${state.mySymbol}`;
+        };
+
+        const saveState = async (newState) => {
+            // Force put to use the roomID as key
+            await state.db.put(newState, state.room);
+        };
+
+        const checkWinner = (board) => {
+            if (!board || !Array.isArray(board)) return null;
+            for (const combo of winningCombinations) {
+                const [a, b, c] = combo;
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    return { winner: board[a], combo };
+                }
+            }
+            return board.every(cell => cell !== null) ? { winner: 'Draw' } : null;
+        };
+
+        const updateUI = () => {
+            const { board, currentPlayer } = state.local;
+            if (!board) return;
+
+            cells.forEach((cell, i) => {
+                const currentContent = cell.textContent;
+                const newContent = board[i] || '';
+
+                if (currentContent !== newContent) {
+                    cell.textContent = '';
+                    cell.classList.remove('x', 'o', 'win');
+                    if (newContent) {
+                        const span = document.createElement('span');
+                        span.textContent = newContent;
+                        cell.appendChild(span);
+                        cell.classList.add(newContent.toLowerCase());
+                    }
+                }
+            });
+
+            // Check if game ended
+            const result = checkWinner(board);
+            if (result) {
+                if (result.winner === 'Draw') {
+                    showEndScreen("It's a Draw!");
+                } else {
+                    highlightWinningLine(result.combo);
+                    setTimeout(() => showEndScreen(`${result.winner} Wins!`), 600);
+                }
+            } else {
+                statusEl.textContent = `Player ${currentPlayer}'s Turn`;
+                overlayEl.classList.remove('show');
+            }
+        };
+
+        const handleCellClick = (e) => {
+            const cell = e.target.closest('.cell');
+            if (!cell) return;
+            
+            const index = parseInt(cell.dataset.index);
+            const { board, currentPlayer, isGameActive } = state.local;
+
+            if (!board || board[index] || !isGameActive) return;
+            
+            // Multiplayer check: Is it my turn?
+            if (state.mySymbol !== currentPlayer) return;
+
+            const newBoard = [...board];
+            newBoard[index] = state.mySymbol;
+            
+            const result = checkWinner(newBoard);
+            const nextPlayer = state.mySymbol === 'X' ? 'O' : 'X';
+            
+            saveState({
+                ...state.local,
+                board: newBoard,
+                currentPlayer: nextPlayer,
+                isGameActive: !result
+            });
+        };
+
+        const highlightWinningLine = (combo) => {
+            cells.forEach(c => c.classList.remove('win'));
+            combo.forEach(index => {
+                document.getElementById(`cell-${index}`).classList.add('win');
+            });
+        };
+
+        const showEndScreen = (text) => {
+            winnerTextEl.textContent = text;
+            overlayEl.classList.add('show');
+        };
+
+        const resetGame = () => {
+            if (state.mySymbol === 'Spectator') return;
+            saveState({
+                ...state.local,
+                board: Array(9).fill(null),
+                currentPlayer: 'X',
+                isGameActive: true
+            });
+        };
+
+        // Event Listeners
+        joinBtn.addEventListener('click', () => {
+            const id = roomInput.value.trim() || 'default-room';
+            initGame(id);
+        });
+
+        roomInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinBtn.click();
+        });
+
+        boardEl.addEventListener('click', handleCellClick);
+        resetBtn.addEventListener('click', resetGame);
+        playAgainBtn.addEventListener('click', resetGame);
+
+        // Auto-join if room in URL
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('room')) {
+            roomInput.value = params.get('room');
+            initGame(params.get('room'));
+        }
+    </script>
+</body>
+</html>
