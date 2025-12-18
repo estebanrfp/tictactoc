@@ -364,18 +364,22 @@
             gameContainer.style.display = 'flex';
 
             // Subscribe to room updates (Live Synchronization)
-            await state.db.get(state.room, (val) => {
-                // GenosDB may return the raw value or a node object { value, ... }
-                const data = (val && val.value !== undefined) ? val.value : val;
+            // Per GenosDB docs: callback receives full node { id, value, edges, timestamp } or null
+            await state.db.get(state.room, (node) => {
+                console.log("📡 Raw node received:", node);
+                
+                // Extract value from node object as per API spec
+                const data = node?.value;
                 
                 if (data && typeof data === 'object' && data.board) {
-                    console.log("🎮 Sync Received:", data);
-                    state.local = data;
+                    console.log("🎮 Game state synced:", data);
+                    state.local = { ...data }; // Clone to avoid proxy issues
                     
-                    // Critical Fix: If joining a room where the game was inactive but empty
+                    // If joining a stale/finished room with no players, reset it
                     const hasPlayers = data.players && (data.players.X || data.players.O);
                     if (!data.isGameActive && !state.mySymbol && !hasPlayers) {
                         resetGame();
+                        return;
                     }
 
                     updateUI();
@@ -383,8 +387,8 @@
                     if (!state.mySymbol) {
                         syncPlayerAssignment();
                     }
-                } else if (!val) {
-                    console.log("🆕 Initializing new room:", state.room);
+                } else if (!node || !data) {
+                    console.log("🆕 Creating new room:", state.room);
                     const initialState = {
                         board: Array(9).fill(null),
                         currentPlayer: 'X',
