@@ -363,18 +363,19 @@
             lobbyContainer.style.display = 'none';
             gameContainer.style.display = 'flex';
 
-            // Subscribe to room updates
-            await state.db.get(state.room, (node) => {
-                const data = node?.value || node;
+            // Subscribe to room updates (Live Synchronization)
+            await state.db.get(state.room, (val) => {
+                // GenosDB may return the raw value or a node object { value, ... }
+                const data = (val && val.value !== undefined) ? val.value : val;
                 
-                if (data && data.board) {
+                if (data && typeof data === 'object' && data.board) {
+                    console.log("🎮 Sync Received:", data);
                     state.local = data;
                     
-                    // Critical Fix: If joining a finished game with no active players, auto-reset
+                    // Critical Fix: If joining a room where the game was inactive but empty
                     const hasPlayers = data.players && (data.players.X || data.players.O);
                     if (!data.isGameActive && !state.mySymbol && !hasPlayers) {
                         resetGame();
-                        return;
                     }
 
                     updateUI();
@@ -382,8 +383,8 @@
                     if (!state.mySymbol) {
                         syncPlayerAssignment();
                     }
-                } else if (!node) {
-                    // Initialize empty room if not exists
+                } else if (!val) {
+                    console.log("🆕 Initializing new room:", state.room);
                     const initialState = {
                         board: Array(9).fill(null),
                         currentPlayer: 'X',
@@ -435,26 +436,26 @@
         };
 
         const updateUI = () => {
-            const { board, currentPlayer } = state.local;
+            const { board, currentPlayer, isGameActive } = state.local;
             if (!board) return;
 
+            // Update cells
             cells.forEach((cell, i) => {
-                const currentContent = cell.textContent;
-                const newContent = board[i] || '';
-
-                if (currentContent !== newContent) {
+                const val = board[i];
+                // Always check textContent to decide if update is needed
+                if (cell.textContent !== (val || '')) {
                     cell.textContent = '';
                     cell.classList.remove('x', 'o', 'win');
-                    if (newContent) {
+                    if (val) {
                         const span = document.createElement('span');
-                        span.textContent = newContent;
+                        span.textContent = val;
                         cell.appendChild(span);
-                        cell.classList.add(newContent.toLowerCase());
+                        cell.classList.add(val.toLowerCase());
                     }
                 }
             });
 
-            // Check if game ended
+            // Turn & Game Status Feedback
             const result = checkWinner(board);
             if (result) {
                 if (result.winner === 'Draw') {
@@ -465,12 +466,26 @@
                     highlightWinningLine(result.combo);
                     setTimeout(() => showEndScreen(`${result.winner} Wins!`), 600);
                 }
+                boardEl.style.pointerEvents = "none";
+                boardEl.style.opacity = "0.7";
             } else {
                 const isMyTurn = state.mySymbol === currentPlayer;
-                statusEl.textContent = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
+                const turnText = isMyTurn ? "Your Turn" : `Waiting for ${currentPlayer}...`;
+                
+                if (statusEl.textContent !== turnText) {
+                    statusEl.textContent = turnText;
+                }
+                
                 boardEl.style.opacity = isMyTurn ? "1" : "0.7";
                 boardEl.style.pointerEvents = isMyTurn ? "auto" : "none";
                 overlayEl.classList.remove('show');
+            }
+
+            // Spectator mode visibility
+            if (state.mySymbol === 'Spectator') {
+                playerStatusEl.textContent = "You are: Spectator (Read Only)";
+            } else {
+                playerStatusEl.textContent = `You are: ${state.mySymbol}`;
             }
         };
 
